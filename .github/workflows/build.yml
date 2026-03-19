@@ -41,6 +41,11 @@ jobs:
       - name: Pull linuxdeploy builder image
         run: docker pull andy5995/linuxdeploy:v3-jammy
 
+      - name: Get VERSION from .env
+        run: |
+          VERSION=$(grep '^VERSION=' .env | cut -d= -f2)
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+
       - name: Build AppImage
         run: |
           export HOSTUID=$(id -u)
@@ -48,6 +53,7 @@ jobs:
           docker compose -f ./docker-compose.yml run --rm build
         env:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          VERSION: ${{ env.VERSION }}
 
       - name: Create sha256sum and set env vars
         run: |
@@ -98,5 +104,5 @@ jobs:
           replacesArtifacts: true
           omitBodyDuringUpdate: true
           omitNameDuringUpdate: true
-          tag: snapshot
+          tag: latest
           token: ${{ secrets.GITHUB_TOKEN }}
