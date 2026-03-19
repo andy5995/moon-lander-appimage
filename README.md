@@ -35,16 +35,17 @@ export HOSTUID=$(id -u) HOSTGID=$(id -g)
 docker compose -f ./docker-compose.yml run --rm build
 ```
 
-The finished AppImage (and its `.sha1sum` and `.zsync` sidecar files) will
+The finished AppImage (and its `.sha256sum` and `.zsync` sidecar files) will
 appear in `./out/`.
 
 ### Override the AppImage version label
 
 `VERSION` is used only as a label in the output filename — it does not pin a
 package version. The source is always cloned from the Salsa repo's default branch.
+The default is `1.0-10` so overriding it is only needed if you want a different label.
 
 ```bash
-VERSION=1.0-10 docker compose -f ./docker-compose.yml run --rm build
+VERSION=1.0-11 docker compose -f ./docker-compose.yml run --rm build
 ```
 
 ### Drop into a shell for debugging
