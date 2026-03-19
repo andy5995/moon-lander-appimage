@@ -6,7 +6,6 @@ services:
       VERSION: "${VERSION:-1.0-10}"
       WORKSPACE: ${WORKSPACE}
     image: andy5995/linuxdeploy:v3-jammy
-    platform: ${PLATFORM:-linux/amd64}
     volumes:
       - ${PWD}:${WORKSPACE}
     working_dir: ${WORKSPACE}
