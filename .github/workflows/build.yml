@@ -1,0 +1,96 @@
+name: Build moon-lander AppImage
+
+on:
+  push:
+    branches:
+      - trunk
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Debian source version to build (e.g. 1.0-10)"
+        required: false
+        default: "1.0-10"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      VERSION: ${{ github.event.inputs.version || '1.0-10' }}
+      WORKSPACE: ${{ github.workspace }}
+      DOCKER_BUILD: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Pull linuxdeploy builder image
+        run: docker pull andy5995/linuxdeploy:v3-jammy
+
+      - name: Build AppImage
+        run: |
+          export HOSTUID=$(id -u)
+          export HOSTGID=$(id -g)
+          docker compose -f ./docker-compose.yml run --rm build
+        env:
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: moon-lander-appimage-${{ env.VERSION }}
+          path: |
+            out/*.AppImage
+            out/*.AppImage.sha1sum
+            out/*.AppImage.zsync
+          if-no-files-found: error
+
+  release:
+    needs: build
+    # Only publish a release on pushes to trunk/main (not on every workflow_dispatch)
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: moon-lander-appimage-*
+          merge-multiple: true
+          path: out/
+
+      - name: Create or update 'latest' release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "moon-lander AppImage (latest)"
+          draft: false
+          prerelease: false
+          files: |
+            out/*.AppImage
+            out/*.AppImage.sha1sum
+            out/*.AppImage.zsync
+          body: |
+            Automatically built from the Debian `moon-lander` source package v${{ env.VERSION }}.
+
+            ## Usage
+
+            ```
+            chmod +x moon-lander-*.AppImage
+            ./moon-lander-*.AppImage
+            ```
+
+            ## Updating
+
+            If you have [appimageupdatetool](https://github.com/AppImageCommunity/AppImageUpdate)
+            installed, the AppImage can update itself:
+
+            ```
+            appimageupdatetool moon-lander-*.AppImage
+            ```
