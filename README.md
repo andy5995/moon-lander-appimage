@@ -1,7 +1,8 @@
 # moon-lander-appimage
 
-Unofficial [moon-lander](https://salsa.debian.org/games-team/moon-lander)
-[AppImage](https://appimage.org/), built from the Debian Salsa packaging repo.
+Unofficial moon-lander [AppImage](https://appimage.org/), built from the
+[Debian Salsa packaging
+repo](https://salsa.debian.org/games-team/moon-lander).
 
 Click the [Releases](../../releases) link to download the latest AppImage.
 
