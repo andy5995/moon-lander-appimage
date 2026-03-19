@@ -4,17 +4,25 @@ on:
   push:
     branches:
       - trunk
-      - main
+  pull_request:
+    branches:
+      - trunk
   workflow_dispatch:
     inputs:
       version:
-        description: "Debian source version to build (e.g. 1.0-10)"
+        description: "AppImage version label (e.g. 1.0-10)"
         required: false
         default: "1.0-10"
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os:
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
 
     env:
       VERSION: ${{ github.event.inputs.version || '1.0-10' }}
@@ -40,19 +48,15 @@ jobs:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
 
       - name: Upload AppImage artifact
+        if: ${{ github.ref != 'refs/heads/trunk' }}
         uses: actions/upload-artifact@v4
         with:
-          name: moon-lander-appimage-${{ env.VERSION }}
-          path: |
-            out/*.AppImage
-            out/*.AppImage.sha1sum
-            out/*.AppImage.zsync
-          if-no-files-found: error
+          name: AppImage-${{ matrix.os }}
+          path: ./out/moon-lander*.AppImage*
 
   release:
     needs: build
-    # Only publish a release on pushes to trunk/main (not on every workflow_dispatch)
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/trunk')
     runs-on: ubuntu-latest
     permissions:
       contents: write
