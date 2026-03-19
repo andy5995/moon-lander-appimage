@@ -167,7 +167,7 @@ appimagetool \
   -u "$UPINFO" \
   "$APPDIR" "$OUT_APPIMAGE"
 
-sha1sum "$OUT_APPIMAGE" > "$OUT_APPIMAGE.sha1sum"
-cat "$OUT_APPIMAGE.sha1sum"
+sha256sum "$OUT_APPIMAGE" > "$OUT_APPIMAGE.sha256sum"
+cat "$OUT_APPIMAGE.sha256sum"
 
 exit 0

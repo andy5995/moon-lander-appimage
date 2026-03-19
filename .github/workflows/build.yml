@@ -47,42 +47,33 @@ jobs:
         env:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
 
+      - name: Create sha1sum and set env vars
+        run: |
+          ARCH=$(uname -m)
+          echo "ARCH=${ARCH}" >> $GITHUB_ENV
+          cd out
+          file=$(ls *.AppImage)
+          sha256sum "$file" > "$file.sha256sum"
+
+      - name: Set artifact name
+        run: echo "ARTIFACT_NAME=moon-lander-AppImage-${ARCH//\//-}" >> $GITHUB_ENV
+
       - name: Upload AppImage artifact
+        if: ${{ github.ref != 'refs/heads/trunk' }}
         uses: actions/upload-artifact@v7
         with:
-          name: AppImage-${{ matrix.os }}
-          path: ./out/moon-lander*.AppImage*
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ./out/*AppImage*
+          if-no-files-found: error
 
-  release:
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/trunk'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v8
-        with:
-          pattern: AppImage-*
-          merge-multiple: true
-          path: out/
-
-      - name: List downloaded files
-        run: find out/ -type f | sort
-
-      - name: Create or update 'latest' release
+      - name: Release (trunk snapshot)
+        if: ${{ github.ref == 'refs/heads/trunk' }}
         uses: ncipollo/release-action@v1
         with:
-          tag: latest
-          name: "moon-lander AppImage (latest)"
-          draft: false
-          prerelease: false
-          allowUpdates: true
-          removeArtifacts: true
-          artifacts: "out/*.AppImage,out/*.AppImage.sha1sum,out/*.AppImage.zsync"
+          artifacts: "./out/*AppImage*"
           body: |
-            Automatically built from the [moon-lander Salsa repo](https://salsa.debian.org/games-team/moon-lander).
+            Snapshot release of the moon-lander AppImage, built automatically from the
+            [moon-lander Salsa repo](https://salsa.debian.org/games-team/moon-lander).
 
             ## Usage
 
@@ -99,3 +90,11 @@ jobs:
             ```
             appimageupdatetool moon-lander-*.AppImage
             ```
+          allowUpdates: true
+          prerelease: true
+          removeArtifacts: false
+          replacesArtifacts: true
+          omitBodyDuringUpdate: true
+          omitNameDuringUpdate: true
+          tag: snapshot
+          token: ${{ secrets.GITHUB_TOKEN }}

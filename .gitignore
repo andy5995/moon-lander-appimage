@@ -1,18 +1,21 @@
-.idea
-.sconsign.dblite
-AppDir
-build
-netpanzer
-pak2bmp
-bmp2pak
-# For some IDEs
-cmake-build-debug
-# For building.
-support/icon/npicon.o
-*.dll
-*.o
-*.log
-/out/moon-lander-1.0-10-x86_64.AppImage
-/out/moon-lander-1.0-10-x86_64.AppImage.sha1sum
-/out/moon-lander-1.0-10-x86_64.AppImage.zsync
+# Build outputs
+out/
+moon-lander-source/
+moon-lander-data-extract/
+
+# AppDir working directory
+*-AppDir/
+
+# Downloaded source tarballs and diffs
+*.tar.gz
+*.tar.xz
+*.dsc
+*.changes
+*.deb
+*.buildinfo
+
+# AppImage outputs (present locally, but committed via releases)
+*.AppImage
+*.AppImage.sha256sum
+*.AppImage.zsync
 /moon-lander/
