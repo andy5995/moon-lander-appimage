@@ -99,7 +99,7 @@ jobs:
             appimageupdatetool moon-lander-*.AppImage
             ```
           allowUpdates: true
-          prerelease: true
+          prerelease: false
           removeArtifacts: false
           replacesArtifacts: true
           omitBodyDuringUpdate: true
