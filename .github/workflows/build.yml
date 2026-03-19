@@ -56,7 +56,7 @@ jobs:
 
   release:
     needs: build
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/trunk')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/trunk'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -70,18 +70,17 @@ jobs:
           path: out/
 
       - name: Create or update 'latest' release
-        uses: softprops/action-gh-release@v2
+        uses: ncipollo/release-action@v1
         with:
-          tag_name: latest
+          tag: latest
           name: "moon-lander AppImage (latest)"
           draft: false
           prerelease: false
-          files: |
-            out/*.AppImage
-            out/*.AppImage.sha1sum
-            out/*.AppImage.zsync
+          allowUpdates: true
+          removeArtifacts: true
+          artifacts: "out/*.AppImage,out/*.AppImage.sha1sum,out/*.AppImage.zsync"
           body: |
-            Automatically built from the Debian `moon-lander` source package v${{ env.VERSION }}.
+            Automatically built from the [moon-lander Salsa repo](https://salsa.debian.org/games-team/moon-lander).
 
             ## Usage
 
