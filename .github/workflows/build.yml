@@ -48,7 +48,6 @@ jobs:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
 
       - name: Upload AppImage artifact
-        if: ${{ github.ref != 'refs/heads/trunk' }}
         uses: actions/upload-artifact@v7
         with:
           name: AppImage-${{ matrix.os }}
@@ -68,6 +67,9 @@ jobs:
           pattern: AppImage-*
           merge-multiple: true
           path: out/
+
+      - name: List downloaded files
+        run: find out/ -type f | sort
 
       - name: Create or update 'latest' release
         uses: ncipollo/release-action@v1

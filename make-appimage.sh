@@ -141,15 +141,13 @@ cd "$OUT_DIR"
 ARCH=$(uname -m)
 export LINUXDEPLOY_OUTPUT_VERSION="$VERSION"
 
-if [ -z "$ACTION_WORKSPACE" ]; then
-  linuxdeploy \
-    --appdir "$APPDIR" \
-    --executable "$APPDIR/usr/games/moon-lander" \
-    --desktop-file "$APPDIR/usr/share/applications/moon-lander.desktop" \
-    --icon-file "$ICON_FILE" \
-    --icon-filename moon-lander \
-    --custom-apprun "$WORKSPACE/AppRun"
-fi
+linuxdeploy \
+  --appdir "$APPDIR" \
+  --executable "$APPDIR/usr/games/moon-lander" \
+  --desktop-file "$APPDIR/usr/share/applications/moon-lander.desktop" \
+  --icon-file "$ICON_FILE" \
+  --icon-filename moon-lander \
+  --custom-apprun "$WORKSPACE/AppRun"
 
 # ---------------------------------------------------------------------------
 # Pack the AppImage
