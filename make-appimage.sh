@@ -166,7 +166,7 @@ OUT_APPIMAGE="moon-lander-$VERSION-$ARCH.AppImage"
 
 REPO="moon-lander-appimage"
 TAG="latest"
-GITHUB_REPOSITORY_OWNER="${GITHUB_REPOSITORY_OWNER:-your-github-username}"
+GITHUB_REPOSITORY_OWNER="${GITHUB_REPOSITORY_OWNER:-andy5995}"
 UPINFO="gh-releases-zsync|$GITHUB_REPOSITORY_OWNER|$REPO|$TAG|*$ARCH.AppImage.zsync"
 
 appimagetool \
