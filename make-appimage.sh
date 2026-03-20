@@ -105,6 +105,15 @@ for d in fonts images sounds; do
   fi
 done
 
+# Documentation — README.txt and man page from the source archive.
+# debian/copyright is included to satisfy the BSD-2-Clause redistribution
+# requirement for the Debian-contributed files (man page, etc.).
+install -D "$SRC_TREE/README.txt" "$APPDIR/usr/share/doc/moon-lander/README.txt"
+install -D "$SRC_TREE/debian/copyright" "$APPDIR/usr/share/doc/moon-lander/copyright"
+if [ -f "$SRC_TREE/debian/moon-lander.6" ]; then
+  install -D "$SRC_TREE/debian/moon-lander.6" "$APPDIR/usr/share/man/man6/moon-lander.6"
+fi
+
 # Desktop file — shipped in debian/ directory
 DESKTOP_SRC=$(find "$SRC_TREE/debian" -name "*.desktop" 2>/dev/null | head -1)
 if [ -n "$DESKTOP_SRC" ]; then
