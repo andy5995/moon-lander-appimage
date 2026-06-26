@@ -27,13 +27,18 @@ the repo above, or install it via [AM](https://github.com/ivan-hc/AM).
 
 ## Build locally
 
-You need Docker (or a compatible runtime) installed.
+The build runs on Arch Linux. The easiest way is a throwaway Arch container:
 
 ```bash
-# From the repo root:
-export HOSTUID=$(id -u) HOSTGID=$(id -g)
-docker compose -f ./docker-compose.yml run --rm build
+docker run --rm -v "$PWD":/repo -w /repo archlinux:latest sh -c '
+  pacman -Syu --noconfirm --needed \
+    base-devel git icoutils quilt patchelf wget zsync \
+    sdl12-compat sdl_image sdl_mixer fuse2 strace xorg-server-xvfb &&
+  ./make-appimage.sh'
 ```
+
+If you are already on Arch (or a derivative such as Manjaro), install those
+packages and run `./make-appimage.sh` directly.
 
 The finished AppImage (and its `.sha256sum` and `.zsync` sidecar files) will
 appear in `./out/`.
@@ -42,24 +47,11 @@ appear in `./out/`.
 
 `VERSION` is used only as a label in the output filename — it does not pin a
 package version. The source is always cloned from the Salsa repo's default branch.
-The default is `1.0-10` so overriding it is only needed if you want a different label.
+The default is `1.0-10`, so overriding it is only needed if you want a
+different label.
 
 ```bash
-VERSION=1.0-11 docker compose -f ./docker-compose.yml run --rm build
-```
-
-### Drop into a shell for debugging
-
-```bash
-export HOSTUID=$(id -u) HOSTGID=$(id -g)
-docker compose -f ./docker-compose.yml run --rm build bash
-```
-
-### Override the build script
-
-```bash
-SCRIPT=/workspace/my-custom-script.sh \
-  docker compose -f ./docker-compose.yml run --rm build
+VERSION=1.0-11 ./make-appimage.sh
 ```
 
 ## GitHub Actions
@@ -73,18 +65,26 @@ Two triggers are configured:
 
 ## About
 
-Built with [andy5995/linuxdeploy](https://hub.docker.com/r/andy5995/linuxdeploy)
-(`v3-jammy`), which bundles
-[linuxdeploy](https://github.com/linuxdeploy/linuxdeploy) and
-[appimagetool](https://github.com/AppImage/appimagetool).
+This is an [Anylinux AppImage](https://github.com/pkgforge-dev/Anylinux-AppImages).
+It is built with [sharun](https://github.com/VHSgunzo/sharun) and the
+[uruntime](https://github.com/VHSgunzo/uruntime). The AppImage bundles its own
+C library and dynamic linker, so it runs on any Linux distribution — including
+musl-based systems and very old ones — without depending on host libraries. It
+also needs no FUSE: if FUSE is missing it falls back to mount namespaces, and
+if those are missing it extracts and runs from a temporary directory.
 
 Source: [salsa.debian.org/games-team/moon-lander](https://salsa.debian.org/games-team/moon-lander) —
 the official Debian packaging repo, which includes the upstream source and all Debian patches.
 Patches are applied via `quilt` before building with plain `make`.
 
+One small source change is applied at build time: the game's data path is made
+relocatable so it reads the `MOON_LANDER_DATAPATH` environment variable (with
+the normal `/usr/share/games/moon-lander/` path as the fallback). The AppImage
+sets this variable to its own bundled data directory.
+
 ## License
 
-The build scripts, AppRun, and other files **created by this repository** are
+The build scripts and other files **created by this repository** are
 released under the [MIT License](LICENSE).
 
 The moon-lander game itself is under a different license. The source code is

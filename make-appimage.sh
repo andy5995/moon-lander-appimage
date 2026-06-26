@@ -1,182 +1,91 @@
-#!/bin/bash
+#!/bin/sh
+# Build a truly-portable "Anylinux" AppImage for moon-lander using sharun +
+# uruntime (https://github.com/pkgforge-dev/Anylinux-AppImages). Unlike the
+# old linuxdeploy build, the result bundles its own libc and dynamic linker,
+# so it runs on any distro — musl, very old glibc — with no host libraries.
+#
+# Run inside an Arch environment with the build deps installed (see
+# .github/workflows/build.yml for the package list).
+set -eux
 
-set -ev
+ARCH="$(uname -m)"
+HERE="$(CDPATH= cd "$(dirname "$0")" && pwd)"
+VERSION="${VERSION:-$(grep '^VERSION=' "$HERE/.env" | cut -d= -f2)}"
 
-if [ -z "$DOCKER_BUILD" ]; then
-  echo "This script is only meant to be used with the linuxdeploy build"
-  echo "helper container."
-  echo "See the moon-lander-appimage README for details."
-  exit 1
-fi
+BUILD="${BUILD:-/tmp/moon-lander-build}"
+SRC="$BUILD/src"
+APPDIR="$BUILD/AppDir"
+OUTPATH="$HERE/out"
 
-if [ -z "$VERSION" ]; then
-  echo "VERSION must be set (e.g. 1.0-10)"
-  exit 1
-fi
+# The bundler. Pin to a tag/commit instead of refs/heads/main for full
+# build reproducibility.
+QUICK_SHARUN_URL="https://raw.githubusercontent.com/pkgforge-dev/Anylinux-AppImages/refs/heads/main/useful-tools/quick-sharun.sh"
 
-if [[ "$WORKSPACE" != /* ]]; then
-  echo "The workspace path must be absolute"
-  exit 1
-fi
+rm -rf "$BUILD"
+mkdir -p "$SRC" "$OUTPATH"
 
-test -d "$WORKSPACE"
-
-APPDIR=${APPDIR:-"/tmp/$USER-AppDir"}
-
-if [ -d "$APPDIR" ]; then
-  rm -rf "$APPDIR"
-fi
-mkdir -v -p "$APPDIR"
-
-env
-export -p
-
-cd "$WORKSPACE"
-
-if [ ! -e "AppRun" ]; then
-  echo "You must be in the same directory where the AppRun file resides"
-  exit 1
-fi
+wget --retry-connrefused --tries=30 "$QUICK_SHARUN_URL" -O "$BUILD/quick-sharun"
+chmod +x "$BUILD/quick-sharun"
 
 # ---------------------------------------------------------------------------
-# Install build-time dependencies
+# Pristine source from Salsa + Debian patches
 # ---------------------------------------------------------------------------
+git clone --depth=1 https://salsa.debian.org/games-team/moon-lander.git "$SRC"
+cd "$SRC"
 
-sudo DEBIAN_FRONTEND=noninteractive sh -c "
-  apt-get update && apt-get -y upgrade && \\
-  apt-get install -y \\
-    build-essential \\
-    git \\
-    icoutils \\
-    quilt \\
-    libsdl1.2-dev \\
-    libsdl-mixer1.2-dev \\
-    libsdl-image1.2-dev \\
-    patchelf \\
-"
-
-# ---------------------------------------------------------------------------
-# Clone source from Salsa and build
-# ---------------------------------------------------------------------------
-
-SRC_TREE="$WORKSPACE/moon-lander"
-
-if [ ! -d "$SRC_TREE" ]; then
-  git clone --depth=1 https://salsa.debian.org/games-team/moon-lander.git "$SRC_TREE"
-fi
-
-cd "$SRC_TREE"
-
-# Apply all Debian patches via quilt
 export QUILT_PATCHES=debian/patches
-if [ -f debian/patches/series ]; then
-  quilt push -a || true
-fi
+[ -f debian/patches/series ] && quilt push -a || true
 
-# Rewrite the hardcoded DATAPATH to a relative path. AppRun will cd to
-# $HERE (the AppImage root) before exec, so ./usr/share/moon-lander/
-# resolves correctly regardless of where the AppImage is mounted.
-sed -i 's|#define DATAPATH "/usr/share/games/moon-lander/"|#define DATAPATH "./usr/share/moon-lander/"|' \
-  "$SRC_TREE/moon_lander.c"
+# Relocatability: moon-lander hardcodes a compile-time DATAPATH for every
+# asset load (no XDG lookup). Make it read MOON_LANDER_DATAPATH at runtime,
+# falling back to the normal FHS path when run installed. The AppDir .env
+# below points it at the bundled data via sharun's ${SHARUN_DIR}.
+sed -i '/#define DATAPATH/c\
+static const char *ml_datapath(void){const char*p=getenv("MOON_LANDER_DATAPATH");return (p&&*p)?p:"/usr/share/games/moon-lander/";}\
+#define DATAPATH ml_datapath()' moon_lander.c
 
-# Build with plain make
 make -j"$(nproc)"
-
-BINARY="$SRC_TREE/moon-lander"
-if [ ! -x "$BINARY" ]; then
-  echo "ERROR: moon-lander binary not found after build"
-  exit 1
-fi
+test -x "$SRC/moon-lander"
 
 # ---------------------------------------------------------------------------
-# Populate AppDir
+# Assemble the AppDir
 # ---------------------------------------------------------------------------
+rm -rf "$APPDIR"
+mkdir -p "$APPDIR/share/moon-lander" "$APPDIR/share/applications" "$APPDIR/share/pixmaps"
+for d in fonts images sounds; do cp -a "$SRC/$d" "$APPDIR/share/moon-lander/"; done
 
-# Binary
-install -Ds "$BINARY" "$APPDIR/usr/games/moon-lander"
+cp "$SRC/debian/moon-lander.desktop" "$APPDIR/share/applications/moon-lander.desktop"
+icotool -x --index=1 -o "$APPDIR/share/pixmaps/moon-lander.png" "$SRC/images/moon-lander.ico"
 
-# Data files live directly in the repo root (no data/ subdirectory)
-mkdir -p "$APPDIR/usr/share/moon-lander"
-for d in fonts images sounds; do
-  if [ -d "$SRC_TREE/$d" ]; then
-    cp -a "$SRC_TREE/$d" "$APPDIR/usr/share/moon-lander/"
-  else
-    echo "WARNING: expected data directory '$d' not found in $SRC_TREE"
-  fi
+printf 'MOON_LANDER_DATAPATH=${SHARUN_DIR}/share/moon-lander/\n' > "$APPDIR/.env"
+
+# ---------------------------------------------------------------------------
+# Bundle with sharun and pack the AppImage
+# ---------------------------------------------------------------------------
+export APPDIR
+export ICON="$APPDIR/share/pixmaps/moon-lander.png"
+export DESKTOP="$APPDIR/share/applications/moon-lander.desktop"
+export OUTPATH
+export OUTNAME="moon-lander-$VERSION-$ARCH.AppImage"
+export MAIN_BIN=moon-lander
+export UPINFO="${UPINFO:-gh-releases-zsync|${GITHUB_REPOSITORY_OWNER:-andy5995}|moon-lander-appimage|latest|*$ARCH.AppImage.zsync}"
+
+# SDL_image 1.2 dlopens its codec libs (they are absent from ldd/NEEDED), so
+# deploy them explicitly — libpng for the .png assets, libjpeg for the one
+# .jpg background. GIF and BMP are built into SDL_image. Without this the
+# bundle silently falls back to the host's copies and is not truly portable.
+CODECS=""
+for s in libpng16.so.16 libjpeg.so.8; do
+  for d in /usr/lib /usr/lib64 /lib; do
+    [ -e "$d/$s" ] && { CODECS="$CODECS $d/$s"; break; }
+  done
 done
 
-# Documentation — README.txt and man page from the source archive.
-# debian/copyright is included to satisfy the BSD-2-Clause redistribution
-# requirement for the Debian-contributed files (man page, etc.).
-install -D "$SRC_TREE/README.txt" "$APPDIR/usr/share/doc/moon-lander/README.txt"
-install -D "$SRC_TREE/debian/copyright" "$APPDIR/usr/share/doc/moon-lander/copyright"
-if [ -f "$SRC_TREE/debian/moon-lander.6" ]; then
-  install -D "$SRC_TREE/debian/moon-lander.6" "$APPDIR/usr/share/man/man6/moon-lander.6"
-fi
+cd "$BUILD"
+# shellcheck disable=SC2086
+./quick-sharun "$SRC/moon-lander" $CODECS
+./quick-sharun --make-appimage
 
-# Desktop file — shipped in debian/ directory
-DESKTOP_SRC=$(find "$SRC_TREE/debian" -name "*.desktop" 2>/dev/null | head -1)
-if [ -n "$DESKTOP_SRC" ]; then
-  install -D "$DESKTOP_SRC" "$APPDIR/usr/share/applications/moon-lander.desktop"
-else
-  mkdir -p "$APPDIR/usr/share/applications"
-  cat > "$APPDIR/usr/share/applications/moon-lander.desktop" <<EOF
-[Desktop Entry]
-Name=Moon Lander
-Comment=Game based on the classic moon lander
-Exec=moon-lander
-Icon=moon-lander
-Type=Application
-Categories=Game;ArcadeGame;
-EOF
-fi
-
-# Icon — extract from the .ico file exactly as the Debian rules file does
-mkdir -p "$APPDIR/usr/share/pixmaps"
-icotool -x --index=1   -o "$APPDIR/usr/share/pixmaps/moon-lander.png"   "$SRC_TREE/images/moon-lander.ico"
-ICON_FILE="$APPDIR/usr/share/pixmaps/moon-lander.png"
-
-
-# ---------------------------------------------------------------------------
-# Run linuxdeploy to bundle shared libraries and finalise the AppDir
-# ---------------------------------------------------------------------------
-
-cd "$WORKSPACE"
-
-OUT_DIR="$WORKSPACE/out"
-mkdir -p "$OUT_DIR"
-cd "$OUT_DIR"
-
-ARCH=$(uname -m)
-export LINUXDEPLOY_OUTPUT_VERSION="$VERSION"
-
-linuxdeploy \
-  --appdir "$APPDIR" \
-  --executable "$APPDIR/usr/games/moon-lander" \
-  --desktop-file "$APPDIR/usr/share/applications/moon-lander.desktop" \
-  --icon-file "$ICON_FILE" \
-  --icon-filename moon-lander \
-  --custom-apprun "$WORKSPACE/AppRun"
-
-# ---------------------------------------------------------------------------
-# Pack the AppImage
-# ---------------------------------------------------------------------------
-
-OUT_APPIMAGE="moon-lander-$VERSION-$ARCH.AppImage"
-
-REPO="moon-lander-appimage"
-TAG="latest"
-GITHUB_REPOSITORY_OWNER="${GITHUB_REPOSITORY_OWNER:-andy5995}"
-UPINFO="gh-releases-zsync|$GITHUB_REPOSITORY_OWNER|$REPO|$TAG|*$ARCH.AppImage.zsync"
-
-appimagetool \
-  --comp zstd \
-  --mksquashfs-opt -Xcompression-level \
-  --mksquashfs-opt 20 \
-  -u "$UPINFO" \
-  "$APPDIR" "$OUT_APPIMAGE"
-
-sha256sum "$OUT_APPIMAGE" > "$OUT_APPIMAGE.sha256sum"
-cat "$OUT_APPIMAGE.sha256sum"
-
-exit 0
+cd "$OUTPATH"
+sha256sum "$OUTNAME" > "$OUTNAME.sha256sum"
+cat "$OUTNAME.sha256sum"

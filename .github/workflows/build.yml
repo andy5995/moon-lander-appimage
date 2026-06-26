@@ -16,30 +16,35 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
 
+    # Built on Arch so the full SDL 1.2 stack and the sharun/uruntime tooling
+    # are available. The resulting AppImage bundles its own libc, so the build
+    # host distro does not constrain where it runs. Official Arch is x86_64-only,
+    # so the arm64 leg uses the community Arch Linux ARM image (digest-pinned).
     strategy:
+      fail-fast: false
       matrix:
-        os:
-          - ubuntu-24.04
-          - ubuntu-24.04-arm
+        include:
+          - runner: ubuntu-24.04
+            image: archlinux:latest
+          - runner: ubuntu-24.04-arm
+            image: lopsided/archlinux@sha256:bb1e4b4a564126c7d91c63813a3d3afe34334ec5dd15285ed8b574c88e23fbde
 
-    env:
-      VERSION: ${{ github.event.inputs.version || '1.0-10' }}
-      WORKSPACE: ${{ github.workspace }}
-      DOCKER_BUILD: "1"
+    container:
+      image: ${{ matrix.image }}
 
     steps:
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel git icoutils quilt patchelf wget zsync \
+            sdl12-compat sdl_image sdl_mixer fuse2 strace xorg-server-xvfb
+
       - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Pull linuxdeploy builder image
-        run: docker pull andy5995/linuxdeploy:v3-jammy
+        uses: actions/checkout@v7
 
       - name: Get VERSION from .env
         run: |
@@ -47,24 +52,16 @@ jobs:
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
 
       - name: Build AppImage
-        run: |
-          export HOSTUID=$(id -u)
-          export HOSTGID=$(id -g)
-          docker compose -f ./docker-compose.yml run --rm build
+        run: ./make-appimage.sh
         env:
+          VERSION: ${{ github.event.inputs.version || env.VERSION }}
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
-          VERSION: ${{ env.VERSION }}
 
-      - name: Create sha256sum and set env vars
+      - name: Set env vars
         run: |
           ARCH=$(uname -m)
           echo "ARCH=${ARCH}" >> $GITHUB_ENV
-          cd out
-          file=$(ls *.AppImage)
-          sha256sum "$file" > "$file.sha256sum"
-
-      - name: Set artifact name
-        run: echo "ARTIFACT_NAME=moon-lander-AppImage-${ARCH//\//-}" >> $GITHUB_ENV
+          echo "ARTIFACT_NAME=moon-lander-AppImage-${ARCH}" >> $GITHUB_ENV
 
       - name: Upload AppImage artifact
         if: ${{ github.ref != 'refs/heads/trunk' }}
@@ -82,6 +79,10 @@ jobs:
           body: |
             Snapshot release of the moon-lander AppImage, built automatically from the
             [moon-lander Salsa repo](https://salsa.debian.org/games-team/moon-lander).
+
+            This is an [Anylinux AppImage](https://github.com/pkgforge-dev/Anylinux-AppImages):
+            it bundles its own C library and runs on any Linux distribution,
+            including musl-based and very old systems.
 
             ## Usage
 
