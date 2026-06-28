@@ -36,38 +36,37 @@ cd "$SRC"
 export QUILT_PATCHES=debian/patches
 [ -f debian/patches/series ] && quilt push -a || true
 
-# Relocatability: moon-lander hardcodes a compile-time DATAPATH for every
-# asset load (no XDG lookup). Make it read MOON_LANDER_DATAPATH at runtime,
-# falling back to the normal FHS path when run installed. The AppDir .env
-# below points it at the bundled data via sharun's ${SHARUN_DIR}.
-sed -i '/#define DATAPATH/c\
-static const char *ml_datapath(void){const char*p=getenv("MOON_LANDER_DATAPATH");return (p&&*p)?p:"/usr/share/games/moon-lander/";}\
-#define DATAPATH ml_datapath()' moon_lander.c
-
 make -j"$(nproc)"
 test -x "$SRC/moon-lander"
 
 # ---------------------------------------------------------------------------
-# Assemble the AppDir
+# Install the binary and assets into a real /usr, then let quick-sharun deploy
+# and relocate them. moon-lander hardcodes its DATAPATH at compile time (the
+# Debian patches set it to /usr/share/games/moon-lander/). Rather than patching
+# the source to add an env seam, we install to /usr and let quick-sharun do what
+# it does for any /usr-prefixed app: rewrite the hardcoded /usr/share path in
+# the binary and symlink the bundled data there at runtime. The compiled-in
+# lookup then just works -- no source change, no .env.
+#
+# Install only the binary and assets -- not the crude upstream install.sh,
+# which copies the whole source tree (.git, .o, debian/) into the datadir.
 # ---------------------------------------------------------------------------
+install -Dm755 "$SRC/moon-lander" /usr/bin/moon-lander
+mkdir -p /usr/share/games/moon-lander
+cp -a "$SRC/fonts" "$SRC/images" "$SRC/sounds" /usr/share/games/moon-lander/
+
+icotool -x --index=1 -o "$BUILD/moon-lander.png" "$SRC/images/moon-lander.ico"
+
 rm -rf "$APPDIR"
-mkdir -p "$APPDIR/share/moon-lander" "$APPDIR/share/applications" "$APPDIR/share/pixmaps"
-for d in fonts images sounds; do cp -a "$SRC/$d" "$APPDIR/share/moon-lander/"; done
-
-cp "$SRC/debian/moon-lander.desktop" "$APPDIR/share/applications/moon-lander.desktop"
-icotool -x --index=1 -o "$APPDIR/share/pixmaps/moon-lander.png" "$SRC/images/moon-lander.ico"
-
-printf 'MOON_LANDER_DATAPATH=${SHARUN_DIR}/share/moon-lander/\n' > "$APPDIR/.env"
 
 # ---------------------------------------------------------------------------
 # Bundle with sharun and pack the AppImage
 # ---------------------------------------------------------------------------
 export APPDIR
-export ICON="$APPDIR/share/pixmaps/moon-lander.png"
-export DESKTOP="$APPDIR/share/applications/moon-lander.desktop"
+export ICON="$BUILD/moon-lander.png"
+export DESKTOP="$SRC/debian/moon-lander.desktop"
 export OUTPATH
 export OUTNAME="moon-lander-$VERSION-$ARCH.AppImage"
-export MAIN_BIN=moon-lander
 export UPINFO="${UPINFO:-gh-releases-zsync|${GITHUB_REPOSITORY_OWNER:-andy5995}|moon-lander-appimage|latest|*$ARCH.AppImage.zsync}"
 
 # SDL_image 1.2 dlopens its codec libs (they are absent from ldd/NEEDED), so
@@ -83,7 +82,7 @@ done
 
 cd "$BUILD"
 # shellcheck disable=SC2086
-./quick-sharun "$SRC/moon-lander" $CODECS
+./quick-sharun /usr/bin/moon-lander $CODECS
 ./quick-sharun --make-appimage
 
 cd "$OUTPATH"
